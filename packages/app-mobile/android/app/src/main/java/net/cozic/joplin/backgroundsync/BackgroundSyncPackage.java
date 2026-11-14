@@ -1,14 +1,25 @@
 package net.cozic.joplin.backgroundsync;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.NativeModule;
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
@@ -37,7 +48,11 @@ public class BackgroundSyncPackage implements ReactPackage {
 
 	public static class BackgroundSyncModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
 		private static final String TAG = "JoplinBackgroundSync";
+		// Job IDs are shared with any other JobScheduler users in the app, so use a distinctive value.
+		private static final int PERIODIC_JOB_ID = 0x4a530001;
 		static final String SYNC_IN_PROGRESS_TASK_KEY = "JoplinSyncInProgress";
+		private static final String ALERT_CHANNEL_ID = "joplin_sync_alerts";
+		private static final int ALERT_NOTIFICATION_ID = 0x4a5341;
 
 		// Guarded by the module's lock: React methods and lifecycle callbacks run on different threads
 		private boolean syncInProgress = false;
@@ -52,6 +67,31 @@ public class BackgroundSyncPackage implements ReactPackage {
 		@Override
 		public String getName() {
 			return "BackgroundSyncModule";
+		}
+
+		@ReactMethod
+		public void schedule(double intervalMinutes, boolean wifiOnly, String notificationTitle, String channelName, Promise promise) {
+			saveNotificationText(notificationTitle, channelName);
+
+			long intervalMs = Math.max(JobInfo.getMinPeriodMillis(), (long) (intervalMinutes * 60 * 1000));
+			int networkType = networkType(wifiOnly);
+
+			// Re-scheduling a job with the same ID stops it if it's running, so leave an identical job alone.
+			JobScheduler scheduler = getScheduler();
+			JobInfo existing = scheduler.getPendingJob(PERIODIC_JOB_ID);
+			if (existing != null && existing.getIntervalMillis() == intervalMs && existing.getNetworkType() == networkType) {
+				promise.resolve(null);
+				return;
+			}
+
+			scheduler.schedule(jobBuilder(PERIODIC_JOB_ID, networkType).setPeriodic(intervalMs).build());
+			promise.resolve(null);
+		}
+
+		@ReactMethod
+		public void cancel(Promise promise) {
+			getScheduler().cancel(PERIODIC_JOB_ID);
+			promise.resolve(null);
 		}
 
 		// Android 12+ only allows starting a foreground service while the app is visible (not even just after it
@@ -71,6 +111,39 @@ public class BackgroundSyncPackage implements ReactPackage {
 			if (!foregroundServiceAcquired) return;
 			foregroundServiceAcquired = false;
 			BackgroundSyncForegroundService.release(getReactApplicationContext());
+		}
+
+		@ReactMethod
+		public void showSyncAlert(String title, String text, String channelName) {
+			Context context = getReactApplicationContext();
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+				NotificationChannel channel = new NotificationChannel(ALERT_CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_DEFAULT);
+				context.getSystemService(NotificationManager.class).createNotificationChannel(channel);
+			}
+
+			NotificationCompat.Builder builder = new NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
+				.setContentTitle(title)
+				.setContentText(text)
+				.setStyle(new NotificationCompat.BigTextStyle().bigText(text))
+				.setSmallIcon(android.R.drawable.stat_notify_error)
+				.setAutoCancel(true);
+
+			Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+			if (launchIntent != null) {
+				builder.setContentIntent(PendingIntent.getActivity(context, 0, launchIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
+			}
+
+			try {
+				NotificationManagerCompat.from(context).notify(ALERT_NOTIFICATION_ID, builder.build());
+			} catch (SecurityException e) {
+				// Android 13+ without the notification permission granted
+				Log.i(TAG, "Could not show sync alert: " + e);
+			}
+		}
+
+		@ReactMethod
+		public void hideSyncAlert() {
+			NotificationManagerCompat.from(getReactApplicationContext()).cancel(ALERT_NOTIFICATION_ID);
 		}
 
 		@Override
@@ -107,7 +180,24 @@ public class BackgroundSyncPackage implements ReactPackage {
 			});
 		}
 
-		// The foreground service builds its notification natively, so the translated text is stored for it.
+		private JobScheduler getScheduler() {
+			return getReactApplicationContext().getSystemService(JobScheduler.class);
+		}
+
+		private int networkType(boolean wifiOnly) {
+			return wifiOnly ? JobInfo.NETWORK_TYPE_UNMETERED : JobInfo.NETWORK_TYPE_ANY;
+		}
+
+		private JobInfo.Builder jobBuilder(int jobId, int networkType) {
+			Context context = getReactApplicationContext();
+			JobInfo.Builder builder = new JobInfo.Builder(jobId, new ComponentName(context, BackgroundSyncJobService.class))
+				.setRequiredNetworkType(networkType)
+				.setPersisted(true);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) builder.setRequiresBatteryNotLow(true);
+			return builder;
+		}
+
+		// A job can run without JS, so the translated notification text is stored natively.
 		private void saveNotificationText(String notificationTitle, String channelName) {
 			getReactApplicationContext()
 				.getSharedPreferences(BackgroundSyncForegroundService.PREFS_NAME, Context.MODE_PRIVATE)

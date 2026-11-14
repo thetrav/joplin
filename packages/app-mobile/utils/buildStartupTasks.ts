@@ -100,6 +100,8 @@ import VoiceTyping from '../services/voiceTyping/VoiceTyping';
 import whisper from '../services/voiceTyping/whisper';
 import PerFolderSortOrderService from '@joplin/lib/services/sortOrder/PerFolderSortOrderService';
 import getConflictFolderId from '@joplin/lib/models/utils/getConflictFolderId';
+import { updateBackgroundSyncSchedule } from '../services/backgroundSync';
+import { StartupTask } from './createStartupTaskRunner';
 const mobileConfig = require('@joplin/mobile-config').default;
 
 
@@ -145,10 +147,12 @@ const getInitialActiveFolder = async () => {
 const buildStartupTasks = (
 	dispatch: Dispatch, store: Store<AppState>,
 ) => {
-	type StartupTask = [string, ()=> Promise<void>];
 	const startupTasks: StartupTask[] = [];
 	const addTask = (name: string, task: ()=> Promise<void>) => {
-		startupTasks.push([name, task]);
+		startupTasks.push([name, task, false]);
+	};
+	const addCoreTask = (name: string, task: ()=> Promise<void>) => {
+		startupTasks.push([name, task, true]);
 	};
 
 	let logDatabase: Database;
@@ -158,16 +162,16 @@ const buildStartupTasks = (
 	let singleInstanceLock: Promise<void>;
 
 
-	addTask('buildStartupTasks/prepare single instance lock', async () => {
+	addCoreTask('buildStartupTasks/prepare single instance lock', async () => {
 		// The single instance lock involves waiting for messages -- start checking
 		// the lock as early as possible.
 		singleInstanceLock = lockToSingleInstance();
 	});
 
-	addTask('buildStartupTasks/shimInit', async () => {
+	addCoreTask('buildStartupTasks/shimInit', async () => {
 		shimInit();
 	});
-	addTask('buildStartupTasks/initProfile', async () => {
+	addCoreTask('buildStartupTasks/initProfile', async () => {
 		const profile = await initProfile(getProfilesRootDir());
 		isSubProfile = profile.isSubProfile;
 		currentProfile = getCurrentProfile(profile.profileConfig);
@@ -177,7 +181,7 @@ const buildStartupTasks = (
 			value: profile.profileConfig,
 		});
 	});
-	addTask('buildStartupTasks/set constants', async () => {
+	addCoreTask('buildStartupTasks/set constants', async () => {
 		Setting.setConstant('env', __DEV__ ? Env.Dev : Env.Prod);
 		Setting.setConstant('appId', 'net.cozic.joplin-mobile');
 		Setting.setConstant('appType', AppType.Mobile);
@@ -193,15 +197,15 @@ const buildStartupTasks = (
 		Setting.setConstant('sync.11.apiKey', '');
 		Setting.setConstant('isJoplinCloudWebApp', Platform.OS === 'web' && location.origin === 'https://app.joplincloud.com');
 	});
-	addTask('buildStartupTasks/make resource directory', async () => {
+	addCoreTask('buildStartupTasks/make resource directory', async () => {
 		await shim.fsDriver().mkdir(Setting.value('resourceDir'));
 	});
-	addTask('buildStartupTasks/singleInstanceLock', async () => {
+	addCoreTask('buildStartupTasks/singleInstanceLock', async () => {
 		// Do as much setup as possible before checking the lock -- the lock intentionally waits for
 		// messages from other clients for several hundred ms.
 		await singleInstanceLock;
 	});
-	addTask('buildStartupTasks/set up logger', async () => {
+	addCoreTask('buildStartupTasks/set up logger', async () => {
 		logDatabase = new Database(new DatabaseDriverReactNative());
 		await logDatabase.open({ name: 'log.sqlite' });
 		await logDatabase.exec(Logger.databaseCreateTableSql());
@@ -218,7 +222,7 @@ const buildStartupTasks = (
 		BaseService.logger_ = mainLogger;
 		PerformanceLogger.setLogger(mainLogger);
 	});
-	addTask('buildStartupTasks/set up database', async () => {
+	addCoreTask('buildStartupTasks/set up database', async () => {
 		reg.setShowErrorMessageBoxHandler((message: string) => { alert(message); });
 		reg.setDispatch(dispatch);
 
@@ -240,7 +244,7 @@ const buildStartupTasks = (
 		db.setLogger(dbLogger);
 		reg.setDb(db);
 	});
-	addTask('buildStartupTasks/initialize item classes', async () => {
+	addCoreTask('buildStartupTasks/initialize item classes', async () => {
 		// reg.dispatch = dispatch;
 		BaseModel.dispatch = dispatch;
 		BaseSyncTarget.dispatch = dispatch;
@@ -261,15 +265,15 @@ const buildStartupTasks = (
 		Resource.fsDriver_ = shim.fsDriver();
 		FileApiDriverLocal.fsDriver_ = shim.fsDriver();
 	});
-	addTask('buildStartupTasks/initializeAlarmService', async () => {
+	addCoreTask('buildStartupTasks/initializeAlarmService', async () => {
 		AlarmService.setLogger(reg.logger());
 		AlarmService.setDriver(new AlarmServiceDriver(reg.logger()));
 	});
-	addTask('buildStartupTasks/openDatabase', async () => {
+	addCoreTask('buildStartupTasks/openDatabase', async () => {
 		await db.open({ name: getDatabaseName(currentProfile, isSubProfile) });
 		// if (Setting.value('env') === 'dev') await db.clearForTesting();
 	});
-	addTask('buildStartupTasks/setUpSettings', async () => {
+	addCoreTask('buildStartupTasks/setUpSettings', async () => {
 		await loadKeychainServiceAndSettings([]);
 		await migrateMasterPassword();
 
@@ -338,7 +342,7 @@ const buildStartupTasks = (
 		initializeCommandService(store);
 		KeymapService.instance().initialize();
 	});
-	addTask('buildStartupTasks/set up E2EE', async () => {
+	addCoreTask('buildStartupTasks/set up E2EE', async () => {
 		setRSA(RSA);
 
 		EncryptionService.fsDriver_ = shim.fsDriver();
@@ -365,10 +369,10 @@ const buildStartupTasks = (
 		};
 		eventManager.on(EventName.NoteLockSessionChange, noteLockSessionChangeListener_);
 	});
-	addTask('buildStartupTasks/set up sharing', async () => {
+	addCoreTask('buildStartupTasks/set up sharing', async () => {
 		await ShareService.instance().initialize(store, EncryptionService.instance());
 	});
-	addTask('buildStartupTasks/migrate PPK', async () => {
+	addCoreTask('buildStartupTasks/migrate PPK', async () => {
 		await migratePpk();
 	});
 	addTask('buildStartupTasks/set up voice typing', async () => {
@@ -455,11 +459,18 @@ const buildStartupTasks = (
 		SearchEngine.instance().setLogger(reg.logger());
 		SearchEngine.instance().scheduleSyncTables();
 	});
-	addTask('buildStartupTasks/run migrations', async () => {
+	addCoreTask('buildStartupTasks/run migrations', async () => {
 		await MigrationService.instance().run();
 	});
 	addTask('buildStartupTasks/complete pending Joplin Cloud auth', async () => {
 		await completePendingAuthentication();
+	});
+	addCoreTask('buildStartupTasks/set up resource fetcher', async () => {
+		ResourceFetcher.instance().setFileApi(() => { return reg.syncTarget().fileApi(); });
+		ResourceFetcher.instance().setLogger(reg.logger());
+		ResourceFetcher.instance().dispatch = dispatch;
+		ResourceFetcher.instance().on('downloadComplete', resourceFetcher_downloadComplete);
+		void ResourceFetcher.instance().start();
 	});
 	addTask('buildStartupTasks/set up background tasks', async () => {
 		initializeUserFetcher();
@@ -471,13 +482,8 @@ const buildStartupTasks = (
 
 		ResourceService.runInBackground();
 
-		ResourceFetcher.instance().setFileApi(() => { return reg.syncTarget().fileApi(); });
-		ResourceFetcher.instance().setLogger(reg.logger());
-		ResourceFetcher.instance().dispatch = dispatch;
-		ResourceFetcher.instance().on('downloadComplete', resourceFetcher_downloadComplete);
-		void ResourceFetcher.instance().start();
-
 		reg.setupRecurrentSync();
+		void updateBackgroundSyncSchedule();
 
 		// When the app starts we want the full sync to
 		// start almost immediately to get the latest data.

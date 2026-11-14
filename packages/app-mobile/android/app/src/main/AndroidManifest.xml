@@ -17,8 +17,9 @@
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
-	<!-- Background sync (see BackgroundSyncForegroundService.java) -->
+	<!-- Background sync (see BackgroundSyncJobService.java). Boot permission keeps the scheduled job after a restart. -->
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+	<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 	<uses-permission android:name="android.permission.WAKE_LOCK" />
 
 	<!-- Make these features optional to enable Chromebooks -->
@@ -73,6 +74,11 @@
 		/>
 
 		<!-- Background sync -->
+		<service
+			android:name=".backgroundsync.BackgroundSyncJobService"
+			android:permission="android.permission.BIND_JOB_SERVICE"
+			android:exported="false"
+		/>
 		<service
 			android:name=".backgroundsync.BackgroundSyncForegroundService"
 			android:foregroundServiceType="dataSync"

@@ -1090,6 +1090,8 @@ packages/app-mobile/utils/autodetectTheme.js
 packages/app-mobile/utils/buildStartupTasks.js
 packages/app-mobile/utils/checkPermissions.js
 packages/app-mobile/utils/createRootStyle.js
+packages/app-mobile/utils/createStartupTaskRunner.test.js
+packages/app-mobile/utils/createStartupTaskRunner.js
 packages/app-mobile/utils/database-driver-react-native.js
 packages/app-mobile/utils/database-driver-react-native.web.js
 packages/app-mobile/utils/debounce.js

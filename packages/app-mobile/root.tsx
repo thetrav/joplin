@@ -114,7 +114,8 @@ import SamlShared from '@joplin/lib/components/shared/SamlShared';
 import NoteRevisionViewer from './components/screens/NoteRevisionViewer';
 import DocumentScanner from './components/screens/DocumentScanner/DocumentScanner';
 import buildStartupTasks from './utils/buildStartupTasks';
-import { onSyncCompleted, onSyncStarted, requestNotificationPermission } from './services/backgroundSync';
+import createStartupTaskRunner from './utils/createStartupTaskRunner';
+import { onSyncCompleted, onSyncStarted, requestNotificationPermission, updateBackgroundSyncSchedule } from './services/backgroundSync';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import appReducer from './utils/appReducer';
 import SyncWizard from './components/SyncWizard/SyncWizard';
@@ -184,6 +185,10 @@ const generalMiddleware = (store: any) => (next: any) => async (action: any) => 
 
 	if (action.type === 'SETTING_UPDATE_ONE' && action.key === 'sync.interval' || action.type === 'SETTING_UPDATE_ALL') {
 		reg.setupRecurrentSync();
+	}
+
+	if (action.type === 'SETTING_UPDATE_ONE' && ['sync.backgroundSync', 'sync.interval', 'sync.mobileWifiOnly', 'sync.target'].includes(action.key)) {
+		void updateBackgroundSyncSchedule();
 	}
 
 	if (action.type === 'SETTING_UPDATE_ONE' && action.key === 'sync.backgroundSync' && action.value) void requestNotificationPermission();
@@ -287,24 +292,28 @@ const generalMiddleware = (store: any) => (next: any) => async (action: any) => 
 const store = createStore(appReducer, applyMiddleware(generalMiddleware));
 storeDispatch = store.dispatch;
 
-async function initialize(dispatch: Dispatch) {
+const runStartupTasks = createStartupTaskRunner(async (name, task) => {
+	await perfLogger.track(name, async () => {
+		try {
+			await task();
+		} catch (error) {
+			logger.error(`Startup failure during task: ${name}`);
+			throw error;
+		}
+	});
+});
+
+const buildTasks = (dispatch: Dispatch) => () => {
 	setDispatch(dispatch);
+	return buildStartupTasks(dispatch, store);
+};
 
-	const startupTasks = buildStartupTasks(dispatch, store);
-
-	for (const [name, task] of startupTasks) {
-		await perfLogger.track(name, async () => {
-			try {
-				await task();
-			} catch (error) {
-				logger.error(`Startup failure during task: ${name}`);
-				throw error;
-			}
-		});
-	}
-
+async function initialize(dispatch: Dispatch) {
+	await runStartupTasks(buildTasks(dispatch), false);
 	logger.info('Application initialized');
 }
+
+export const initializeForBackgroundSync = () => runStartupTasks(buildTasks(store.dispatch), true);
 
 interface AppComponentProps {
 	dispatch: Dispatch;

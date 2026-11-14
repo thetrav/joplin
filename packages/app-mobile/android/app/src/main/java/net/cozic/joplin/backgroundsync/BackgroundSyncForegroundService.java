@@ -16,7 +16,8 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 // Keeps the process at foreground priority while a long sync runs, so it isn't suspended when the app is closed
-// or the screen turns off.
+// or cut off by the job time limit. Android 12+ only allows starting it from the background (from a sync job)
+// when the app is exempt from battery optimisation; the job then runs with the normal limit and resumes next time.
 public class BackgroundSyncForegroundService extends Service {
 	private static final String TAG = "JoplinBackgroundSync";
 	static final String PREFS_NAME = "joplin_background_sync";
@@ -27,6 +28,7 @@ public class BackgroundSyncForegroundService extends Service {
 
 	private static final long WAKE_LOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000;
 
+	// Sync jobs and a sync continued from the app can overlap
 	private static int activeJobCount = 0;
 
 	// Keeps the CPU running with the screen off
