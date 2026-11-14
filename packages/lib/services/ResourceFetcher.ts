@@ -19,6 +19,7 @@ export default class ResourceFetcher extends BaseService {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Mixed usage: stores both boolean placeholders and ResourceEntity values; queuedItemIndex_ also iterates this as an array (legacy bug)
 	private fetchingItems_: any = {};
 	private maxDownloads_ = 3;
+	private remainingCount_ = 0;
 	private addingResources_ = false;
 	private eventEmitter_ = new EventEmitter();
 	private autoAddResourcesCalls_: boolean[] = [];
@@ -82,6 +83,7 @@ export default class ResourceFetcher extends BaseService {
 			type: 'RESOURCE_FETCHER_SET',
 			fetchingCount: fetchingCount,
 			toFetchCount: fetchingCount + this.queue_.length,
+			remainingCount: this.remainingCount_,
 		});
 	}
 
@@ -245,6 +247,9 @@ export default class ResourceFetcher extends BaseService {
 				const added = this.queueDownload_(resources[i].id);
 				if (added) count++;
 			}
+
+			this.remainingCount_ = await Resource.needToBeFetchedCount(Setting.value('sync.resourceDownloadMode'));
+			this.updateReport();
 
 			this.logger().info(`ResourceFetcher: Auto-added resources: ${count}`);
 

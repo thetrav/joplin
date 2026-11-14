@@ -397,7 +397,11 @@ const SideMenuContentComponent = (props: Props) => {
 
 		let resourceFetcherText = '';
 		if (props.resourceFetcher && props.resourceFetcher.toFetchCount) {
-			resourceFetcherText = _('Fetching resources: %d/%d', props.resourceFetcher.fetchingCount, props.resourceFetcher.toFetchCount);
+			resourceFetcherText = [
+				_('Fetching attachments:'),
+				_('Downloading: %d', props.resourceFetcher.fetchingCount),
+				_('Remaining: %d', props.resourceFetcher.remainingCount),
+			].join('\n');
 		}
 
 		const fullReport = [];

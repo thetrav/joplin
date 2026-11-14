@@ -82,6 +82,7 @@ export interface StateDecryptionWorker {
 export interface StateResourceFetcher {
 	toFetchCount: number;
 	fetchingCount: number;
+	remainingCount: number;
 }
 
 export interface StateLastDeletion {
@@ -262,6 +263,7 @@ export const defaultState: State = {
 	resourceFetcher: {
 		toFetchCount: 0,
 		fetchingCount: 0,
+		remainingCount: 0,
 	},
 	// pluginsLegacy is the original plugin system, which eventually was used only for GotoAnything.
 	// GotoAnything should be refactored to part of core and when it's done the pluginsLegacy key can
