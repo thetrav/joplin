@@ -10,6 +10,7 @@ import './utils/initReact';
 import './utils/polyfills';
 
 import Root from './root';
+import { registerBackgroundSyncTask } from './services/backgroundSync';
 import { LogBox } from 'react-native';
 import { registerRootComponent } from 'expo';
 // Allows loading image assets. See https://github.com/expo/expo/issues/31240
@@ -50,6 +51,7 @@ LogBox.ignoreLogs([
 ]);
 
 registerRootComponent(Root);
+registerBackgroundSyncTask();
 
 // Using streams on react-native requires to polyfill process.nextTick()
 global.process.nextTick = setImmediate;

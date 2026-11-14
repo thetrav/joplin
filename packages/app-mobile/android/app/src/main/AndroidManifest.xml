@@ -17,6 +17,10 @@
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
+	<!-- Background sync (see BackgroundSyncForegroundService.java) -->
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+	<uses-permission android:name="android.permission.WAKE_LOCK" />
+
 	<!-- Make these features optional to enable Chromebooks -->
 	<!-- https://github.com/laurent22/joplin/issues/37 -->
 	<uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -66,6 +70,13 @@
 			android:name="expo.modules.audio.service.AudioRecordingService"
 			android:exported="false"
 			android:foregroundServiceType="microphone"
+		/>
+
+		<!-- Background sync -->
+		<service
+			android:name=".backgroundsync.BackgroundSyncForegroundService"
+			android:foregroundServiceType="dataSync"
+			android:exported="false"
 		/>
 
 		<!--

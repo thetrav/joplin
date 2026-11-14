@@ -1059,6 +1059,8 @@ packages/app-mobile/services/AlarmServiceDriver.android.js
 packages/app-mobile/services/AlarmServiceDriver.ios.js
 packages/app-mobile/services/AlarmServiceDriver.web.js
 packages/app-mobile/services/BackButtonService.js
+packages/app-mobile/services/backgroundSync/index.test.js
+packages/app-mobile/services/backgroundSync/index.js
 packages/app-mobile/services/commands/stateToWhenClauseContext.js
 packages/app-mobile/services/e2ee/RSA.react-native.js
 packages/app-mobile/services/e2ee/RSA.react-native.web.js

@@ -114,6 +114,7 @@ import SamlShared from '@joplin/lib/components/shared/SamlShared';
 import NoteRevisionViewer from './components/screens/NoteRevisionViewer';
 import DocumentScanner from './components/screens/DocumentScanner/DocumentScanner';
 import buildStartupTasks from './utils/buildStartupTasks';
+import { onSyncCompleted, onSyncStarted, requestNotificationPermission } from './services/backgroundSync';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import appReducer from './utils/appReducer';
 import SyncWizard from './components/SyncWizard/SyncWizard';
@@ -184,6 +185,10 @@ const generalMiddleware = (store: any) => (next: any) => async (action: any) => 
 	if (action.type === 'SETTING_UPDATE_ONE' && action.key === 'sync.interval' || action.type === 'SETTING_UPDATE_ALL') {
 		reg.setupRecurrentSync();
 	}
+
+	if (action.type === 'SETTING_UPDATE_ONE' && action.key === 'sync.backgroundSync' && action.value) void requestNotificationPermission();
+	if (action.type === 'SYNC_STARTED') onSyncStarted();
+	if (action.type === 'SYNC_COMPLETED') void onSyncCompleted();
 
 	if ((action.type === 'SETTING_UPDATE_ONE' && (action.key === 'dateFormat' || action.key === 'timeFormat')) || (action.type === 'SETTING_UPDATE_ALL')) {
 		time.setDateFormat(Setting.value('dateFormat'));

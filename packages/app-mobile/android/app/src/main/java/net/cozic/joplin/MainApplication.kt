@@ -13,6 +13,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import net.cozic.joplin.systeminfo.SystemInformationPackage
 import net.cozic.joplin.share.SharePackage
 import net.cozic.joplin.ssl.SslPackage
+import net.cozic.joplin.backgroundsync.BackgroundSyncPackage
 
 class MainApplication : Application(), ReactApplication {
     override val reactHost: ReactHost by lazy {
@@ -24,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
                     add(SharePackage())
                     add(SslPackage())
                     add(SystemInformationPackage())
+                    add(BackgroundSyncPackage())
                 }
             )
     }
