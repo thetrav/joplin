@@ -108,14 +108,24 @@ export default class Resource extends BaseItem {
 		`, [Resource.FETCH_STATUS_ERROR]);
 	}
 
-	public static needToBeFetched(resourceDownloadMode: string = null, limit: number = null) {
-		const sql = ['SELECT * FROM resources WHERE encryption_applied = 0 AND id IN (SELECT resource_id FROM resource_local_states WHERE fetch_status = ?)'];
+	private static needToBeFetchedSql(select: string, resourceDownloadMode: string) {
+		const sql = [`SELECT ${select} FROM resources WHERE encryption_applied = 0 AND id IN (SELECT resource_id FROM resource_local_states WHERE fetch_status = ?)`];
 		if (resourceDownloadMode !== 'always') {
 			sql.push('AND resources.id IN (SELECT resource_id FROM resources_to_download)');
 		}
+		return sql;
+	}
+
+	public static needToBeFetched(resourceDownloadMode: string = null, limit: number = null) {
+		const sql = this.needToBeFetchedSql('*', resourceDownloadMode);
 		sql.push('ORDER BY updated_time DESC');
 		if (limit !== null) sql.push(`LIMIT ${limit}`);
 		return this.modelSelectAll(sql.join(' '), [Resource.FETCH_STATUS_IDLE]);
+	}
+
+	public static async needToBeFetchedCount(resourceDownloadMode: string) {
+		const r = await this.db().selectOne(this.needToBeFetchedSql('count(*) as total', resourceDownloadMode).join(' '), [Resource.FETCH_STATUS_IDLE]);
+		return r ? r.total : 0;
 	}
 
 	public static async resetStartedFetchStatus() {
